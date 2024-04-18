@@ -1,25 +1,46 @@
 #!/usr/bin/env python
 
+import os
+import shutil
 import subprocess
 import sys
 
-FILENAME_BASE = 1
+import pandas as pd
 
-lines = []
-with open(sys.argv[1]) as f:
-    lines = f.readlines()
+exclude_columns = ['shot', 'filename', 'targetfilename']
 
-# first line gives us the exif keys
-exifbits = lines[0].strip().split(',')
-lines = lines[1:]
+def main() -> None:
+    df = pd.read_excel(sys.argv[1])
+    photos_base_dir = sys.argv[2]
+    target_dir = sys.argv[3]
 
-for line in lines:
-    bits = line.strip().split(',')
-    joined = zip(bits, exifbits)
-    filename = bits[1]
-    print(f"Processing {filename}")
-    for item in joined:
-        if not item[0] or not item[1] or item[1] in ['filename', 'shot']:
-            continue
-        subprocess.call(['exiftool', filename, '-overwrite_original', f'-{item[1]}={item[0]}'])
-        # print(['exiftool', filename, '-overwrite_original', f'-{item[1]}={item[0]}'])
+    os.makedirs(target_dir, exist_ok=True)
+
+    photos = os.listdir(photos_base_dir)
+    for photo in photos:
+        photopath = os.path.join(photos_base_dir, photo)
+
+        row = df[df.filename==photo]
+        data = row.to_dict(orient='records')[0]
+        # print(data)
+
+        targetfilename = data['targetfilename']
+        if not targetfilename or not isinstance(targetfilename, str):
+            targetfilename = photo
+        targetpath = os.path.join(target_dir, targetfilename)
+
+        shutil.copyfile(photopath, targetpath)
+
+        if data['targetfilename']:
+            print(['exiftool', '-alldates<filename', targetpath])
+            subprocess.call(['exiftool', '-alldates<filename', targetpath])
+
+        for key, value in data.items():
+            if not key or not value or key in exclude_columns:
+                continue
+            print(['exiftool', targetpath, '-overwrite_original', f'-{key}={value}'])
+            subprocess.call(['exiftool', targetpath, '-overwrite_original', f'-{key}={value}'])
+
+
+if __name__ == "__main__":
+    main()
